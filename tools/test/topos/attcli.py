@@ -78,16 +78,15 @@ class IperfCLI( CLI ):
     def do_bw( self, line ):
         "bw: show last reported iperf server ingress bandwidth"
         output( "Last reported iperf UDP server input bandwidth:\n" )
-        now = time()
         for h in self.mn.hosts:
             lastout, lasttime = self.lastbw.get( h, ( '', 0 ) )
             out = h.cmd( 'tail -1 /tmp/%s.iperf' % h )
             if '---' in out or ( out == lastout and
-                                 now - lasttime >= 1.0 ):
+                                 time() - lasttime > 1.5 ):
                 # Stale update - don't display
                 out = '\n'
             else:
-                self.lastbw[ h ] = ( out, now )
+                self.lastbw[ h ] = ( out, time() )
             output( '%s:' % h, out )
 
     def do_rand( self, line ):
