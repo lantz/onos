@@ -21,14 +21,15 @@ class IperfCLI( CLI ):
 
     def __init__( self, net, *args, **kwargs ):
         self.iperfs = {}
-        self.bw = '10k'
+        self.bw = '12k'
         self.mn = net
         self.start()
         quietRun( 'rm /tmp/*.iperf' )
         CLI.__init__( self, net, *args, **kwargs )
 
     def __del__( self ):
-        quietRun( 'pkill iperf' )
+        "Destructor: kill *all* iperf servers and clients!"
+        quietRun( 'pkill -9 iperf' )
 
     def start( self ):
         "Start iperf servers"
@@ -41,25 +42,25 @@ class IperfCLI( CLI ):
     def udpstart( self, h1, h2, bw):
         "Start up a udp iperf from h1 to h2 with bw bw"
         # For udp we don't have to wait for startup
-        h1.cmdPrint( 'kill %iperf; wait' )
+        self.udpstop( h1 )
         h1.cmdPrint( 'iperf -c', h2.IP(),
                      '-t 36000 -u -b', bw,
                      '1>/tmp/%s.client 2>&1 &' % h1 )
 
-    def udpstop( self, host ):
+    def udpstop( self, h ):
         "Stop udp client on host h"
-        host.cmdPrint( 'kill %iperf' )
+        h.cmdPrint( 'kill %iperf && wait' )
 
     def do_udp( self, line ):
         """udp h1 h2 [rate]: start a udp iperf session from h1 to h2
-           rate: udp transmit rate [4K]"""
+           rate: udp transmit rate [12k]"""
         args = line.split()
         if len( args ) not in ( 2, 3 ):
             error( 'usage: udp h1 h2 [rate]\n' )
             return
         h1, h2 = self.mn.get( *args[ :2 ] )
         bw = self.bw if len( args ) == 2 else args[ 2 ]
-        udp( h1, h2, bw )
+        self.udpstart( h1, h2, bw )
 
     def do_stop( self, line ):
         "Stop iperf client/server on host"
@@ -74,14 +75,16 @@ class IperfCLI( CLI ):
 
     def do_bw( self, line ):
         "Report iperf bandwidth"
+        output( "Last reported iperf UDP server input bandwidth:\n" )
         for h in self.mn.hosts:
             out = h.cmd( 'tail -1 /tmp/%s.iperf' % h )
             output( '%s:' % h, out )
 
     def do_rand( self, line ):
         """Start up a random set of N flows (default: 10)
-           at the given bandwidth (default: 11k)
+           at the given bandwidth (default: 12k)
            Note: this may replace existing flows"""
+        output( 'Starting/restarting random flows...\n' )
         args = line.split()
         N = 10 if not args else int( args[ 0 ] )
         bw = self.bw if len( args ) < 2 else args[ 1 ]
@@ -91,6 +94,12 @@ class IperfCLI( CLI ):
             dests.remove( h1 )
             h2 = random.choice( dests )
             self.udpstart( h1, h2, bw )
+
+    def do_jobs( self, line ):
+        "Print iperf jobs"
+        output( "Currently running jobs:\n" )
+        for h in self.mn.hosts:
+            output( '%s:' % h, h.cmd( 'jobs' ).strip(), '\n' )
 
 
 def run( Topo=AttMplsTopo ):
@@ -102,7 +111,9 @@ def run( Topo=AttMplsTopo ):
           '###\n'
           '### udp h1 h2 [bw]   start iperf udp from h1 to h2\n'
           '### stop h1 h2       stop iperf udp from h1 to h2\n'
-          '### bw               report recent iperf udp bandwidth\n\n' )
+          '### rand [N]         start/restart N random udp iperfs\n'
+          '### bw               show last reported udp input bandwidth\n'
+          '### jobs             list current jobs\n\n' )
     IperfCLI( net )
     net.stop()
 
