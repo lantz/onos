@@ -8,7 +8,6 @@ from mininet.net import Mininet
 from mininet.cli import CLI
 from mininet.util import quietRun
 from mininet.log import setLogLevel, info, output, error
-from mininet.util import waitListening
 from mininet.node import RemoteController
 
 from attmplsfast import AttMplsTopo
@@ -35,14 +34,14 @@ class IperfCLI( CLI ):
 
     def start( self ):
         "Start iperf servers"
-        for h in self.mn.hosts:
+        for h in sorted( self.mn.hosts ):
             with open( '/tmp/%s.iperf' % h, 'w' ) as f:
                 cmd = 'iperf -f k -i 1 -s -u'
                 popen = h.popen( cmd, stdin=PIPE, stdout=f, stderr=STDOUT )
                 self.iperfs[ h ] = popen
 
     def udpstart( self, h1, h2, bw):
-        "Start up a udp iperf from h1 to h2 with bw bw"
+        "Start up a udp iperf from h1 to h2 with bandwidth bw"
         # For udp we don't have to wait for startup
         self.udpstop( h1 )
         h1.cmdPrint( 'iperf -c', h2.IP(),
@@ -50,8 +49,8 @@ class IperfCLI( CLI ):
                      '1>/tmp/%s.client 2>&1 &' % h1 )
 
     def udpstop( self, h ):
-        "Stop udp client on host h"
-        h.cmdPrint( 'kill %iperf && wait' )
+        "udpstop h: Stop udp client on host h"
+        h.cmdPrint( 'kill %iperf && wait %iperf' )
 
     def do_udp( self, line ):
         """udp h1 h2 [rate]: start a udp iperf session from h1 to h2
@@ -67,7 +66,7 @@ class IperfCLI( CLI ):
     def do_stop( self, line ):
         "Stop iperf client/server on host"
         if not line:
-            error( 'usage: stop [hostname|all]\n' )
+            error( 'usage: stop [ hostname | all]\n' )
             return
         if line == 'all':
             hosts = self.mn.hosts
@@ -77,7 +76,7 @@ class IperfCLI( CLI ):
             self.udpstop( h )
 
     def do_bw( self, line ):
-        "Report iperf bandwidth"
+        "bw: show last reported iperf server ingress bandwidth"
         output( "Last reported iperf UDP server input bandwidth:\n" )
         now = time()
         for h in self.mn.hosts:
@@ -92,10 +91,9 @@ class IperfCLI( CLI ):
             output( '%s:' % h, out )
 
     def do_rand( self, line ):
-        """Start up a random set of N flows (default: 10)
+        """rand [N [bw]]: Start N random flows (default: 10)
            at the given bandwidth (default: 12k)
            Note: this may replace existing flows"""
-        output( 'Starting/restarting random flows...\n' )
         args = line.split()
         N = 10
         if args:
@@ -104,16 +102,19 @@ class IperfCLI( CLI ):
             except:
                 error( 'please specify an integer' )
                 return
+        output( 'Starting/restarting', N, 'random flows...\n' )
         bw = self.bw if len( args ) < 2 else args[ 1 ]
-        hosts = random.sample( self.mn.hosts, N )
-        for h1 in hosts:
-            dests = list( self.mn.hosts )
-            dests.remove( h1 )
-            h2 = random.choice( dests )
-            self.udpstart( h1, h2, bw )
+        servers = random.sample( self.mn.hosts, N )
+        clients = []
+        for server in servers:
+            allclients = [ h for h in self.mn.hosts
+                           if h not in clients ]
+            client = random.choice( allclients )
+            clients.append( client )
+            self.udpstart( client, server, bw )
 
     def do_jobs( self, line ):
-        "Print iperf jobs"
+        "jobs: List iperf jobs"
         output( "Currently running jobs:\n" )
         for h in self.mn.hosts:
             output( '%s:' % h, h.cmd( 'jobs' ).strip(), '\n' )
@@ -129,8 +130,8 @@ def run( Topo=AttMplsTopo ):
           '### udp h1 h2 [bw]   start iperf udp from h1 to h2\n'
           '### stop h1 h2       stop iperf udp from h1 to h2\n'
           '### rand [N]         start/restart N random udp iperfs\n'
-          '### bw               show last reported udp input bandwidth\n'
-          '### jobs             list current jobs\n\n' )
+          '### bw               show last reported udp ingress bandwidth\n'
+          '### jobs             list iperf jobs\n\n' )
     IperfCLI( net )
     net.stop()
 
