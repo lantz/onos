@@ -65,11 +65,8 @@ class IperfCLI( CLI ):
         self.udpstart( h1, h2, bw )
 
     def do_stop( self, line ):
-        "Stop iperf client/server on host"
-        if not line:
-            error( 'usage: stop [ hostname | all]\n' )
-            return
-        if line == 'all':
+        "stop [host | all]: Stop iperf client on host"
+        if not line or line == 'all':
             hosts = self.mn.hosts
         else:
             hosts = [ self.mn.get( line ) ]
