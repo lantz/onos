@@ -14,6 +14,7 @@ from mininet.node import RemoteController
 from attmplsfast import AttMplsTopo
 
 from subprocess import PIPE, STDOUT
+from time import time
 import random
 
 class IperfCLI( CLI ):
@@ -23,6 +24,8 @@ class IperfCLI( CLI ):
         self.iperfs = {}
         self.bw = '12k'
         self.mn = net
+        self.lastbw = {}  # last bandwidth reports
+        self.lastbwtime = time()
         self.start()
         quietRun( 'rm /tmp/*.iperf' )
         CLI.__init__( self, net, *args, **kwargs )
@@ -65,20 +68,29 @@ class IperfCLI( CLI ):
     def do_stop( self, line ):
         "Stop iperf client/server on host"
         if not line:
-            error( 'usage: stop [hostname|all]' )
+            error( 'usage: stop [hostname|all]\n' )
+            return
         if line == 'all':
             hosts = self.mn.hosts
         else:
-            hosts = [ self.get( line ) ]
+            hosts = [ self.mn.get( line ) ]
         for h in hosts:
             self.udpstop( h )
 
     def do_bw( self, line ):
         "Report iperf bandwidth"
         output( "Last reported iperf UDP server input bandwidth:\n" )
+        now = time()
         for h in self.mn.hosts:
             out = h.cmd( 'tail -1 /tmp/%s.iperf' % h )
+            last = self.lastbw.get( h, '')
+            if '---' in out or ( out == last and
+                                 now - self.lastbwtime >= 1.0 ):
+                # No update in last second - clear it
+                out = '\n'
+            self.lastbw[ h ] = out
             output( '%s:' % h, out )
+        self.lastbwtime = now
 
     def do_rand( self, line ):
         """Start up a random set of N flows (default: 10)
