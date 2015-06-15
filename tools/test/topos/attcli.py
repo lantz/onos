@@ -25,7 +25,6 @@ class IperfCLI( CLI ):
         self.bw = '12k'
         self.mn = net
         self.lastbw = {}  # last bandwidth reports
-        self.lastbwtime = time()
         self.start()
         quietRun( 'rm /tmp/*.iperf' )
         CLI.__init__( self, net, *args, **kwargs )
@@ -82,15 +81,15 @@ class IperfCLI( CLI ):
         output( "Last reported iperf UDP server input bandwidth:\n" )
         now = time()
         for h in self.mn.hosts:
+            lastout, lasttime = self.lastbw.get( h, ( '', 0 ) )
             out = h.cmd( 'tail -1 /tmp/%s.iperf' % h )
-            last = self.lastbw.get( h, '')
-            if '---' in out or ( out == last and
-                                 now - self.lastbwtime >= 1.0 ):
-                # No update in last second - clear it
+            if '---' in out or ( out == lastout and
+                                 now - lasttime >= 1.0 ):
+                # Stale update - don't display
                 out = '\n'
-            self.lastbw[ h ] = out
+            else:
+                self.lastbw[ h ] = ( out, now )
             output( '%s:' % h, out )
-        self.lastbwtime = now
 
     def do_rand( self, line ):
         """Start up a random set of N flows (default: 10)
@@ -98,7 +97,13 @@ class IperfCLI( CLI ):
            Note: this may replace existing flows"""
         output( 'Starting/restarting random flows...\n' )
         args = line.split()
-        N = 10 if not args else int( args[ 0 ] )
+        N = 10
+        if args:
+            try:
+                N = int( args[ 0 ] )
+            except:
+                error( 'please specify an integer' )
+                return
         bw = self.bw if len( args ) < 2 else args[ 1 ]
         hosts = random.sample( self.mn.hosts, N )
         for h1 in hosts:
