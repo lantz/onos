@@ -25,7 +25,7 @@ class IperfCLI( CLI ):
         self.mn = net
         self.lastbw = {}  # last bandwidth reports
         self.start()
-        quietRun( 'rm /tmp/*.iperf' )
+        quietRun( 'rm /tmp/*.iperf /tmp/*.client' )
         CLI.__init__( self, net, *args, **kwargs )
 
     def __del__( self ):
@@ -51,6 +51,7 @@ class IperfCLI( CLI ):
     def udpstop( self, h ):
         "udpstop h: Stop udp client on host h"
         h.cmdPrint( 'kill %iperf && wait %iperf' )
+        h.cmdPrint( 'rm /tmp/%s.client' % h )
 
     def do_udp( self, line ):
         """udp h1 h2 [rate]: start a udp iperf session from h1 to h2
